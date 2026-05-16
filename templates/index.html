@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ChatBot</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
+
+    .chat-container {
+      width: 420px;
+      background: #16213e;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      height: 600px;
+    }
+
+    /* ── Header ── */
+    .chat-header {
+      background: #0f3460;
+      padding: 18px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .chat-header h2 { color: #fc2e04; font-size: 1.1rem; }
+    .status { font-size: 0.75rem; color: #a0aec0; }
+    .status span { color: #68d391; }
+
+    #clear-btn {
+      background: transparent;
+      border: 1px solid #e94560;
+      color: #e94560;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.75rem;
+    }
+    #clear-btn:hover { background: #95152d; color: white; }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: #0f3460; border-radius: 4px; }
+
+    .message {
+      max-width: 80%;
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+
+    .user-msg {
+      background: #e94560;
+      color: white;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+    }
+    .bot-msg {
+      background: #083276;
+      color: #e2e8f0;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .typing {
+      background: #1133bc;
+      color: #a0aec0;
+      align-self: flex-start;
+      padding: 10px 16px;
+      border-radius: 16px;
+      border-bottom-left-radius: 4px;
+      font-size: 1.2rem;
+      letter-spacing: 3px;
+    }
+
+    /* ── Input Area ── */
+    .chat-input {
+      display: flex;
+      padding: 14px 16px;
+      background: #0f3460;
+      gap: 10px;
+    }
+    #user-input {
+      flex: 1;
+      padding: 10px 14px;
+      background: #16213e;
+      border: 1px solid #1a1a2e;
+      border-radius: 24px;
+      color: white;
+      font-size: 0.9rem;
+      outline: none;
+    }
+    #user-input:focus { border-color: #e94560; }
+    #user-input::placeholder { color: #718096; }
+
+    #send-btn {
+      background: #e94560;
+      border: none;
+      color: white;
+      padding: 10px 18px;
+      border-radius: 24px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    #send-btn:hover { background: #c73652; }
+    #send-btn:disabled { background: #555; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+<div class="chat-container">
+  <div class="chat-header">
+    <div>
+      <h2>🤖AstraX</h2>
+      <div class="status">Status: <span>Online</span></div>
+    </div>
+    <button id="clear-btn">Clear Chat</button>
+  </div>
+
+  <div id="messages">
+    <div class="message bot-msg">👋 Hello! I'm your AI assistant. Ask me anything!</div>
+  </div>
+
+  <div class="chat-input">
+    <input id="user-input" type="text" placeholder="Type your message..." autocomplete="off"/>
+    <button id="send-btn">Send</button>
+  </div>
+</div>
+
+<script>
+  const messagesDiv = document.getElementById("messages");
+  const userInput   = document.getElementById("user-input");
+  const sendBtn     = document.getElementById("send-btn");
+  const clearBtn    = document.getElementById("clear-btn");
+
+  // Add a message bubble to the chat
+  function addMessage(text, sender) {
+    const div = document.createElement("div");
+    div.className = `message ${sender === "user" ? "user-msg" : "bot-msg"}`;
+    div.textContent = text;
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight; // auto scroll down
+  }
+
+  // Show "..." while waiting for bot reply
+  function showTyping() {
+    const div = document.createElement("div");
+    div.className = "typing";
+    div.id = "typing-indicator";
+    div.textContent = "...";
+    messagesDiv.appendChild(div);
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  }
+
+  function removeTyping() {
+    const t = document.getElementById("typing-indicator");
+    if (t) t.remove();
+  }
+
+  // Send message to Flask backend
+  async function sendMessage() {
+    const message = userInput.value.trim();
+    if (!message) return;
+
+    addMessage(message, "user");  // Show user's message
+    userInput.value = "";
+    sendBtn.disabled = true;
+    showTyping();
+
+    try {
+      // POST request to our /chat route
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message })
+      });
+
+      const data = await res.json();
+      removeTyping();
+      addMessage(data.reply || data.error, "bot");  // Show bot's reply
+    } catch (err) {
+      removeTyping();
+      addMessage("⚠️ Something went wrong. Try again.", "bot");
+    }
+
+    sendBtn.disabled = false;
+    userInput.focus();
+  }
+
+  // Send on button click
+  sendBtn.addEventListener("click", sendMessage);
+
+  // Send on pressing Enter key
+  userInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage();
+  });
+
+  // Clear chat
+  clearBtn.addEventListener("click", async () => {
+    await fetch("/clear", { method: "POST" });
+    messagesDiv.innerHTML = '<div class="message bot-msg">🔄 Chat cleared! Start fresh!</div>';
+  });
+</script>
+
+</body>
+</html>
